@@ -1,0 +1,11 @@
+{
+  "name": "dashlane_export_shadowcljs",
+  "version": "0.0.1",
+  "private": true,
+  "devDependencies": {
+    "shadow-cljs": "2.10.9"
+  },
+  "dependencies": {
+    "kdbxweb": "^1.9.0"
+  }
+}
