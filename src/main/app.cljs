@@ -1,12 +1,11 @@
 (ns app
   (:require [cljs.core.async :refer-macros [go]]
             [cljs.core.async :refer [<! >!]]
-            [cljs.core.async.interop :refer-macros [<p!]]))
+            [cljs.core.async.interop :refer-macros [<p!]]
+            [util :refer [read-file-async write-file-async!]]))
 
 (enable-console-print!)
 
-(def fs (js/require "fs"))
-(def fspromise (.-promises fs))
 (def kdbxweb (js/require "kdbxweb"))
 
 (def DASHLANE-ENTRY-FIELDS #{"domain"
@@ -21,17 +20,7 @@
                             "Title"
                             "URL"
                             "UserName"})
-
-(defn read-file-async [path]
-  (go (try
-        (<p! (.readFile fspromise path))
-        (catch js/Error err
-          (println (ex-cause err))
-          nil))))
-
-(defn write-file-async! [path content]
-  (go (try
-        (<p! (.writeFile fspromise path content)))))
+(def IMPORT-GROUP-NAME "DashlaneImportGroup")
 
 (defn load-dashlane-export [export]
   (go
@@ -42,26 +31,28 @@
 (defn get-db-handle-with-creds [kdbx-arraybuf creds]
   (go
     (try
+      (let [_ (prn kdbx-arraybuf)
+            _ (prn creds)])
       (<p! (.load kdbxweb.Kdbx kdbx-arraybuf creds))
       (catch js/Error err
         (println (ex-cause err))
         nil))))
 
-(defn load-kdbx-db [kdbx pw]
+(defn load-kdbx-db [kdbx-path pw]
   (go
     (let [protectedpw (.fromString kdbxweb.ProtectedValue pw)
           creds (kdbxweb.Credentials. protectedpw)
-          buf (<! (read-file-async kdbx))
-          arraybuf (.-buffer buf)
-          handle (<! (get-db-handle-with-creds arraybuf creds))]
+          buf (<! (read-file-async kdbx-path))
+          kdbx-arraybuf (.-buffer buf)
+          handle (<! (get-db-handle-with-creds kdbx-arraybuf creds))]
       handle)))
 
 (defn get-or-create-import-group! [kdbx-handle]
   (let [default-group (.getDefaultGroup kdbx-handle)
         subgroups (.-groups default-group)
-        import-group (some #(= "DashlaneImportGroup" %) subgroups)]
+        import-group (some #(= IMPORT-GROUP-NAME %) subgroups)]
     (if (nil? import-group)
-      (.createGroup kdbx-handle default-group "DashlaneImportGroup")
+      (.createGroup kdbx-handle default-group IMPORT-GROUP-NAME)
       import-group)))
 
 (defn add-dashlane-entry! [kdbx-handle entry]
@@ -86,4 +77,10 @@
       (write-file-async! out-path data-buf))))
 
 (defn main [& cli-args]
-  (println "hello world"))
+  (println "preparing to convert dashlane export!")
+  (go
+    (let [dash-accounts (<! (load-dashlane-export "DashlaneExport.json"))
+          kdbx-handle (<! (load-kdbx-db
+                           "Passwords.kdbx"
+                           "jarjarbinksslaughtermongrel24"))]
+      (println kdbx-handle))))
