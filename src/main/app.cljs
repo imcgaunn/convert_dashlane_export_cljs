@@ -2,7 +2,7 @@
   (:require [cljs.core.async :refer-macros [go]]
             [cljs.core.async :refer [<! >!]]
             [cljs.core.async.interop :refer-macros [<p!]]
-            [util :refer [read-file-async write-file-async!]]))
+            [util :refer [read-file-async write-file-async! prdr]]))
 
 (enable-console-print!)
 
@@ -31,19 +31,24 @@
 (defn get-db-handle-with-creds [kdbx-arraybuf creds]
   (go
     (try
-      (let [_ (prn kdbx-arraybuf)
-            _ (prn creds)])
       (<p! (.load kdbxweb.Kdbx kdbx-arraybuf creds))
       (catch js/Error err
-        (println (ex-cause err))
+        (prdr (ex-cause err))
         nil))))
+
+(defn buf->arraybuf [buf]
+  (let [offset (.-byteOffset buf)
+        bytelen (.-byteLength buf)
+        arraybuf (.slice (.-buffer buf)
+                         offset
+                         (+ offset bytelen))] arraybuf))
 
 (defn load-kdbx-db [kdbx-path pw]
   (go
     (let [protectedpw (.fromString kdbxweb.ProtectedValue pw)
           creds (kdbxweb.Credentials. protectedpw)
           buf (<! (read-file-async kdbx-path))
-          kdbx-arraybuf (.-buffer buf)
+          kdbx-arraybuf (buf->arraybuf buf)
           handle (<! (get-db-handle-with-creds kdbx-arraybuf creds))]
       handle)))
 
@@ -83,4 +88,4 @@
           kdbx-handle (<! (load-kdbx-db
                            "Passwords.kdbx"
                            "jarjarbinksslaughtermongrel24"))]
-      (println kdbx-handle))))
+      (prdr kdbx-handle))))

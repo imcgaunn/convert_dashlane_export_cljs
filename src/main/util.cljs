@@ -18,3 +18,8 @@
 (defn write-file-async! [path content]
   (go (try
         (<p! (.writeFile fspromise path content)))))
+
+(defn prdr
+  "little utility wrapper for console.dir"
+  [& args]
+  (.dir js/console args))
