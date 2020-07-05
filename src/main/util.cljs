@@ -8,6 +8,16 @@
 (def fs (js/require "fs"))
 (def fspromise (.-promises fs))
 
+(defn path-exists? [path]
+  (go
+    (try
+      (do
+        (<p! (.access fspromise path))
+        true)
+      (catch js/Error err
+        (println (ex-cause err))
+        false))))
+
 (defn read-file-async [path]
   (go (try
         (<p! (.readFile fspromise path))

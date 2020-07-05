@@ -2,7 +2,11 @@
   (:require [cljs.core.async :refer-macros [go]]
             [cljs.core.async :refer [<! >!]]
             [cljs.core.async.interop :refer-macros [<p!]]
-            [util :refer [read-file-async write-file-async! prdr]]))
+            [clojure.tools.cli :refer [parse-opts]]
+            [util :refer [read-file-async
+                          write-file-async!
+                          prdr
+                          path-exists?]]))
 
 (enable-console-print!)
 
@@ -55,10 +59,11 @@
 (defn get-or-create-import-group! [kdbx-handle]
   (let [default-group (.getDefaultGroup kdbx-handle)
         subgroups (.-groups default-group)
-        import-group (some #(= IMPORT-GROUP-NAME %) subgroups)]
-    (if (nil? import-group)
-      (.createGroup kdbx-handle default-group IMPORT-GROUP-NAME)
-      import-group)))
+        import-groups (filter #(= IMPORT-GROUP-NAME (.-name %)) subgroups)]
+    (cond
+      (= (count import-groups) 1) (first import-groups)
+      (> (count import-groups) 1) (first import-groups) ; would be better if could merge duplicate importgroups
+      (= (count import-groups) 0) (.createGroup kdbx-handle default-group IMPORT-GROUP-NAME))))
 
 (defn add-dashlane-entry! [kdbx-handle entry]
   (let [import-group (get-or-create-import-group! kdbx-handle)
@@ -81,6 +86,15 @@
     (let [data-buf (<! (save-kdbx-handle kdbx-handle))]
       (write-file-async! out-path data-buf))))
 
+(def cli-opts
+  [["-d" "--dashlane-export EXPORTPATH" "Path to dashlane export json"
+    :validate [#(path-exists? %) "Must refer to a file that exists"]]
+   ["-k" "--keepass-db KDBXPATH" "Path to input keepass database"
+    :validate [#(path-exists? %) "Must refer to a file that exists"]]
+   ["-p" "--keepass-pw KDBXPASS" "Password for kdbx database"]
+   ["-o" "--output KDBXOUTPATH" "Output path for new kdbx with imported entries"]
+   ["-h" "--help"]])
+
 (defn main [& cli-args]
   (println "preparing to convert dashlane export!")
   (go
@@ -88,4 +102,11 @@
           kdbx-handle (<! (load-kdbx-db
                            "Passwords.kdbx"
                            "jarjarbinksslaughtermongrel24"))]
-      (prdr kdbx-handle))))
+      (doseq [entry dash-accounts]
+        (do
+          (let [title (get entry "title")]
+            (println (str "importing entry with title: " title))
+            (add-dashlane-entry! kdbx-handle entry))))
+      (save-kdbx-db! kdbx-handle "Newdatabase.kdbx")
+      (println "import successful")
+      (println "saved new database to 'Newdatabase.kdbx'"))))
