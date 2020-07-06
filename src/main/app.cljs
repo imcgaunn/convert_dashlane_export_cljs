@@ -96,17 +96,24 @@
    ["-h" "--help"]])
 
 (defn main [& cli-args]
-  (println "preparing to convert dashlane export!")
-  (go
-    (let [dash-accounts (<! (load-dashlane-export "DashlaneExport.json"))
-          kdbx-handle (<! (load-kdbx-db
-                           "Passwords.kdbx"
-                           "jarjarbinksslaughtermongrel24"))]
-      (doseq [entry dash-accounts]
-        (do
-          (let [title (get entry "title")]
-            (println (str "importing entry with title: " title))
-            (add-dashlane-entry! kdbx-handle entry))))
-      (save-kdbx-db! kdbx-handle "Newdatabase.kdbx")
-      (println "import successful")
-      (println "saved new database to 'Newdatabase.kdbx'"))))
+  (let [args (parse-opts cli-args cli-opts)
+        errors (:errors args)
+        options (:options args)
+        dashlane-export (:dashlane-export options)
+        keepass-db (:keepass-db options)
+        keepass-pw (:keepass-pw options)
+        output-path (:output options)]
+    (if (not (nil? errors))
+        (println (:summary args))
+        (go
+          (let [dash-accounts (<! (load-dashlane-export dashlane-export))
+                kdbx-handle (<! (load-kdbx-db keepass-db keepass-pw))]
+            (doseq [entry dash-accounts]
+              (do
+                (let [title (get entry "title")]
+                  (println (str "importing entry with title: " title))
+                  (add-dashlane-entry! kdbx-handle entry))))
+            (save-kdbx-db! kdbx-handle output-path)
+            (println "import successful"))
+          (println
+           (str "saved new database to: '" output-path "'"))))))
