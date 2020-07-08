@@ -7,16 +7,15 @@
 
 (def fs (js/require "fs"))
 (def fspromise (.-promises fs))
+(def process (js/require "process"))
 
 (defn path-exists? [path]
-  (go
-    (try
-      (do
-        (<p! (.access fspromise path))
-        true)
-      (catch js/Error err
-        (println (ex-cause err))
-        false))))
+  (try
+    (do
+      (.accessSync fs path)
+      true)
+    (catch js/Error err
+      false)))
 
 (defn read-file-async [path]
   (go (try
@@ -33,3 +32,8 @@
   "little utility wrapper for console.dir"
   [& args]
   (.dir js/console args))
+
+(defn exit [msg ok?]
+  (println msg)
+  (.exit process
+         (if ok? 0 233)))

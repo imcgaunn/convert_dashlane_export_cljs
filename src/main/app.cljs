@@ -3,7 +3,9 @@
             [cljs.core.async :refer [<! >!]]
             [cljs.core.async.interop :refer-macros [<p!]]
             [clojure.tools.cli :refer [parse-opts]]
-            [util :refer [read-file-async
+            [clojure.string :as str]
+            [util :refer [exit
+                          read-file-async
                           write-file-async!
                           prdr
                           path-exists?]]))
@@ -95,18 +97,28 @@
    ["-o" "--output KDBXOUTPATH" "Output path for new kdbx with imported entries"]
    ["-h" "--help"]])
 
+(defn err-msg [errors]
+  (str "encountered the following error[s]\n\n"
+       (str/join \newline errors)))
+
 (defn main [& cli-args]
   (let [args (parse-opts cli-args cli-opts)
         errors (:errors args)
         options (:options args)
+        summary (:summary args)
+        help? (:help options)
         dashlane-export (:dashlane-export options)
         keepass-db (:keepass-db options)
         keepass-pw (:keepass-pw options)
         output-path (:output options)]
-    (if (not (nil? errors))
-        (println (:summary args))
-        (go
-          (let [dash-accounts (<! (load-dashlane-export dashlane-export))
+    (cond
+      ; print a cool summary if help arg is passed
+      help? (exit summary true)
+      ; die if there's a problem
+      (not (nil? errors)) (exit (err-msg errors) false)
+      ; if no errors, let the games begin
+      (nil? errors)
+      (go (let [dash-accounts (<! (load-dashlane-export dashlane-export))
                 kdbx-handle (<! (load-kdbx-db keepass-db keepass-pw))]
             (doseq [entry dash-accounts]
               (do
@@ -115,5 +127,7 @@
                   (add-dashlane-entry! kdbx-handle entry))))
             (save-kdbx-db! kdbx-handle output-path)
             (println "import successful"))
-          (println
-           (str "saved new database to: '" output-path "'"))))))
+          (exit
+           (str "saved new database to: '" output-path "'")
+           true))
+      :else (exit summary false))))
